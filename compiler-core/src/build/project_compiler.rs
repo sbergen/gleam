@@ -525,12 +525,12 @@ where
             // project, not to the current working directory. The language server
             // could have the working directory and the project root in different
             // places.
-            ManifestPackageSource::Local { path } if path.is_relative() => {
+            ManifestPackageSource::Local { path, .. } if path.is_relative() => {
                 self.io.canonicalise(&self.paths.root().join(path))?
             }
 
             // If the path is absolute we can use it as-is.
-            ManifestPackageSource::Local { path } => path.clone(),
+            ManifestPackageSource::Local { path, .. } => path.clone(),
 
             // Hex and Git packages are downloaded into the project's build
             // directory.

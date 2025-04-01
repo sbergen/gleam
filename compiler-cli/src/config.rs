@@ -44,7 +44,7 @@ pub fn find_package_config_for_module(
 
 fn package_root(package: &ManifestPackage, project_paths: &ProjectPaths) -> Utf8PathBuf {
     match &package.source {
-        ManifestPackageSource::Local { path } => project_paths.root().join(path),
+        ManifestPackageSource::Local { path, .. } => project_paths.root().join(path),
 
         ManifestPackageSource::Hex { .. } | ManifestPackageSource::Git { .. } => {
             project_paths.build_packages_package(&package.name)

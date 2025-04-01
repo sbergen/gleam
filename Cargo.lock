@@ -1084,6 +1084,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walkdir",
+ "xxhash-rust",
 ]
 
 [[package]]

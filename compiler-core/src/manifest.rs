@@ -91,10 +91,12 @@ impl Manifest {
                     buffer.push_str(commit);
                     buffer.push('"');
                 }
-                ManifestPackageSource::Local { path } => {
+                ManifestPackageSource::Local { path, fingerprint } => {
                     buffer.push_str(r#", source = "local", path = ""#);
                     buffer.push_str(&make_relative(root_path, path).as_str().replace('\\', "/"));
                     buffer.push('"');
+                    buffer.push_str(", fingerprint = ");
+                    buffer.push_str(&fingerprint.to_string());
                 }
             };
 
@@ -195,7 +197,7 @@ pub enum ManifestPackageSource {
     #[serde(rename = "git")]
     Git { repo: EcoString, commit: EcoString },
     #[serde(rename = "local")]
-    Local { path: Utf8PathBuf }, // should be the canonical path
+    Local { path: Utf8PathBuf, fingerprint: u64 }, // should be the canonical path
 }
 
 fn sorted_vec<S, T>(value: &[T], serializer: S) -> Result<S::Ok, S::Error>

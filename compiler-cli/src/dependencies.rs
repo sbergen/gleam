@@ -66,6 +66,7 @@ pub fn tree(paths: &ProjectPaths, options: TreeOptions) -> Result<()> {
         version: config.version.clone(),
         source: ManifestPackageSource::Local {
             path: paths.root().to_path_buf(),
+            fingerprint: 0, // Doesn't matter here?
         },
         otp_app: None,
     };
@@ -639,6 +640,7 @@ fn get_manifest<Telem: Telemetry>(
             &config.all_direct_dependencies()?,
             paths.root(),
         )?
+        && local_packages_unchanged(&paths, &manifest)?
     {
         tracing::debug!("manifest_up_to_date");
         Ok((false, manifest))
@@ -655,6 +657,30 @@ fn get_manifest<Telem: Telemetry>(
         )?;
         Ok((true, manifest))
     }
+}
+
+fn local_packages_unchanged(project_paths: &ProjectPaths, manifest: &Manifest) -> Result<bool> {
+    for package in &manifest.packages {
+        match &package.source {
+            ManifestPackageSource::Local { path, fingerprint } => {
+                // TODO deduplicate?
+                let path = if path.is_absolute() {
+                    path.to_path_buf()
+                } else {
+                    fs::canonicalise(&project_paths.root().join(path))?
+                };
+
+                // TODO: deduplicate
+                let toml = fs::read(path.join("gleam.toml"))?;
+                if *fingerprint != xxhash_rust::xxh3::xxh3_64(toml.as_bytes()) {
+                    return Ok(false);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(true)
 }
 
 fn is_same_requirements(
@@ -703,7 +729,7 @@ struct ProvidedPackage {
 #[derive(Clone, Eq, Debug)]
 enum ProvidedPackageSource {
     Git { repo: EcoString, commit: EcoString },
-    Local { path: Utf8PathBuf },
+    Local { path: Utf8PathBuf, fingerprint: u64 },
 }
 
 impl ProvidedPackage {
@@ -758,7 +784,10 @@ impl ProvidedPackageSource {
                 repo: repo.clone(),
                 commit: commit.clone(),
             },
-            Self::Local { path } => ManifestPackageSource::Local { path: path.clone() },
+            Self::Local { path, fingerprint } => ManifestPackageSource::Local {
+                path: path.clone(),
+                fingerprint: *fingerprint,
+            },
         }
     }
 
@@ -767,8 +796,8 @@ impl ProvidedPackageSource {
             Self::Git { repo, commit } => {
                 format!(r#"{{ repo: "{repo}", commit: "{commit}" }}"#)
             }
-            Self::Local { path } => {
-                format!(r#"{{ path: "{path}" }}"#)
+            Self::Local { path, fingerprint } => {
+                format!(r#"{{ path: "{path}", fingerprint: {fingerprint} }}"#)
             }
         }
     }
@@ -777,8 +806,18 @@ impl ProvidedPackageSource {
 impl PartialEq for ProvidedPackageSource {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Local { path: own_path }, Self::Local { path: other_path }) => {
+            (
+                Self::Local {
+                    path: own_path,
+                    fingerprint: own_fingerprint,
+                },
+                Self::Local {
+                    path: other_path,
+                    fingerprint: other_fingerprint,
+                },
+            ) => {
                 is_same_file(own_path, other_path).unwrap_or(false)
+                    && own_fingerprint == other_fingerprint
             }
 
             (
@@ -888,8 +927,14 @@ fn provide_local_package(
     } else {
         fs::canonicalise(&parent_path.join(package_path))?
     };
+
+    // TODO: This double read could be optimized
+    let toml = fs::read(package_path.join("gleam.toml"))?;
+    let fingerprint = xxhash_rust::xxh3::xxh3_64(toml.as_bytes());
+
     let package_source = ProvidedPackageSource::Local {
         path: package_path.clone(),
+        fingerprint,
     };
     provide_package(
         package_name,

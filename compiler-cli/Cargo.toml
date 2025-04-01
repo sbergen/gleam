@@ -38,6 +38,9 @@ opener = "0"
 # Pubgrub dependency resolution algorithm
 pubgrub = "0"
 
+# TODO: Move to workspace
+xxhash-rust = { version = "0", features = ["xxh3"] }
+
 camino = { workspace = true, features = ["serde1"] }
 async-trait.workspace = true
 base16.workspace = true
